@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Quote create returned HTTP 500 after save (#583)** — The quote was persisted, but the redirect to the quote detail page crashed because the view expected `requires_approval` and `can_be_sent`, and templates could set `approval_level`, while the `Quote` model had no matching fields. Added `requires_approval` and `approval_level` columns, a `can_be_sent` property aligned with send rules, wired the create-form checkbox, fixed the approval banner branch to use `approval_status == 'not_required'`, migration `145_add_quotes_requires_approval`, and regression coverage in `tests/test_routes/test_quotes_web.py`.
+
 ### Added
+- **Quote line item display order** — `quote_items.position` (default 0) with relationship ordering `position`, then `id`; migration `146_add_quote_item_position`; create and update flows assign positions from form row order so PDFs and views stay consistent.
 - **Offline queue replay** — Queued requests now store method, headers, and body in a replay-safe form (serializable for localStorage). POST/PUT requests replayed when back online send the same body and method. Legacy queue items (with `options` only) are still replayed via fallback.
 - **Inventory API scopes** — New scopes `read:inventory` and `write:inventory` for inventory-only API access. Existing `read:projects` and `write:projects` still grant the same inventory access for backward compatibility.
 - **Client portal reports: date range and CSV export** — Reports support optional `days` query param (1–365, default 30). Add `?format=csv` to download a CSV of the same report (summary, hours by project, time by date). Export uses the same access control as the reports page.
 - **Jira webhook verification** — When a webhook secret is configured in the Jira integration (Connection Settings → Webhook Secret), incoming webhooks are verified using HMAC-SHA256 of the request body. Supported headers: `X-Hub-Signature-256`, `X-Atlassian-Webhook-Signature`, `X-Hub-Signature`. Requests with missing or invalid signature are rejected. If no secret is set, behavior is unchanged (all webhooks accepted).
 
 ### Changed
+- **Factur-X / PDF/A-3 invoice PDFs (export and email)** — Download and email attachments use the same embed-and-normalize path. Embedded CII uses Associated File relationship **Data** and MIME **text/xml**. PDF/A-3 normalization embeds sRGB via `app/resources/icc/` (override with `INVOICE_SRGB_ICC_PATH`). Added `app/utils/invoice_pdf_postprocess.py` and tests; [PEPPOL e-Invoicing](docs/admin/configuration/PEPPOL_EINVOICING.md) updated (veraPDF note, pytest command).
 - **Documentation sync** — CODEBASE_AUDIT.md: marked gaps 2.3–2.7 and 2.9 as fixed; added “Implemented 2026-03-16” summary. CLIENT_FEATURES_IMPLEMENTATION_STATUS: report date range and CSV export noted as implemented. INCOMPLETE_IMPLEMENTATIONS_ANALYSIS: added “Verified 2026-03-16” for webhook verification, issues permissions, search API, offline queue.
 - **Activity feed API date params** — `/api/activity` now returns 400 with a clear message when `start_date` or `end_date` are invalid (e.g. not ISO 8601). Invalid dates on the web route `/activity` are logged and the filter is skipped (no 500).
 - **Invoice PEPPOL compliance check** — Exceptions in the PEPPOL compliance block are no longer silently ignored: specific and generic exceptions are caught, logged, and a generic warning (“Could not verify PEPPOL compliance; check configuration.”) is shown to the user so the view still renders.

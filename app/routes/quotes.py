@@ -94,6 +94,7 @@ def create_quote():
         discount_amount = request.form.get("discount_amount", "").strip()
         discount_reason = request.form.get("discount_reason", "").strip()
         coupon_code = request.form.get("coupon_code", "").strip()
+        requires_approval = request.form.get("requires_approval") == "true"
 
         try:
             current_app.logger.info(
@@ -211,6 +212,7 @@ def create_quote():
             discount_amount=discount_amount_decimal if discount_amount_decimal else None,
             discount_reason=discount_reason if discount_reason else None,
             coupon_code=coupon_code.upper() if coupon_code else None,
+            requires_approval=requires_approval,
         )
 
         db.session.add(quote)
@@ -224,6 +226,7 @@ def create_quote():
         item_stock_ids = request.form.getlist("item_stock_item_id[]")
         item_warehouse_ids = request.form.getlist("item_warehouse_id[]")
 
+        line_position = 0
         for desc, qty, price, unit, stock_id, wh_id in zip(
             item_descriptions, item_quantities, item_prices, item_units, item_stock_ids, item_warehouse_ids
         ):
@@ -240,8 +243,10 @@ def create_quote():
                         unit=unit.strip() if unit else None,
                         stock_item_id=stock_item_id,
                         warehouse_id=warehouse_id,
+                        position=line_position,
                     )
                     db.session.add(item)
+                    line_position += 1
                 except (ValueError, InvalidOperation):
                     pass  # Skip invalid items
 
@@ -413,6 +418,7 @@ def edit_quote(quote_id):
         while len(item_warehouse_ids) < len(item_ids):
             item_warehouse_ids.append("")
 
+        line_position = 0
         for item_id, desc, qty, price, unit, stock_id, wh_id in zip(
             item_ids, item_descriptions, item_quantities, item_prices, item_units, item_stock_ids, item_warehouse_ids
         ):
@@ -433,6 +439,7 @@ def edit_quote(quote_id):
                             item.stock_item_id = stock_item_id
                             item.warehouse_id = warehouse_id
                             item.is_stock_item = stock_item_id is not None
+                            item.position = line_position
                     else:
                         # Create new item
                         item = QuoteItem(
@@ -443,8 +450,10 @@ def edit_quote(quote_id):
                             unit=unit.strip() if unit else None,
                             stock_item_id=stock_item_id,
                             warehouse_id=warehouse_id,
+                            position=line_position,
                         )
                         db.session.add(item)
+                    line_position += 1
                 except (ValueError, InvalidOperation):
                     pass  # Skip invalid items
 
@@ -1444,6 +1453,7 @@ def duplicate_quote(quote_id):
             quantity=original_item.quantity,
             unit_price=original_item.unit_price,
             unit=original_item.unit,
+            position=original_item.position,
         )
         db.session.add(new_item)
 
@@ -1541,6 +1551,7 @@ def bulk_action():
                         quantity=item.quantity,
                         unit_price=item.unit_price,
                         unit=item.unit,
+                        position=item.position,
                     )
                     db.session.add(new_item)
 

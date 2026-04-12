@@ -55,6 +55,8 @@ class Quote(db.Model):
     approved_at = db.Column(db.DateTime, nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
     rejected_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    requires_approval = db.Column(db.Boolean, default=False, nullable=False)
+    approval_level = db.Column(db.Integer, nullable=False, default=1)
 
     # Client portal visibility
     visible_to_client = db.Column(
@@ -93,7 +95,13 @@ class Quote(db.Model):
     accepter = db.relationship("User", foreign_keys=[accepted_by], backref="accepted_quotes")
     approver = db.relationship("User", foreign_keys=[approved_by], backref="approved_quotes")
     rejecter = db.relationship("User", foreign_keys=[rejected_by], backref="rejected_quotes")
-    items = db.relationship("QuoteItem", backref="quote", lazy="selectin", cascade="all, delete-orphan")
+    items = db.relationship(
+        "QuoteItem",
+        backref="quote",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="QuoteItem.position, QuoteItem.id",
+    )
     template = db.relationship("QuotePDFTemplate", backref="quotes", lazy="joined")
 
     def __init__(self, quote_number, client_id, title, created_by, **kwargs):
@@ -122,6 +130,9 @@ class Quote(db.Model):
             self.discount_amount = Decimal("0")
         self.discount_reason = kwargs.get("discount_reason", "").strip() if kwargs.get("discount_reason") else None
         self.coupon_code = kwargs.get("coupon_code", "").strip().upper() if kwargs.get("coupon_code") else None
+
+        self.requires_approval = bool(kwargs.get("requires_approval", False))
+        self.approval_level = int(kwargs.get("approval_level", 1) or 1)
 
     def __repr__(self):
         return f"<Quote {self.quote_number} ({self.title})>"
@@ -162,6 +173,15 @@ class Quote(db.Model):
     def has_project(self):
         """Check if quote has been converted to a project"""
         return self.project_id is not None
+
+    @property
+    def can_be_sent(self):
+        """Draft quotes can be sent if approval is not required or already approved."""
+        if self.status != "draft":
+            return False
+        if not self.requires_approval:
+            return True
+        return self.approval_status == "approved"
 
     def calculate_totals(self):
         """Calculate quote totals from items, applying discount if any"""
@@ -411,13 +431,24 @@ class QuoteItem(db.Model):
     is_stock_item = db.Column(db.Boolean, default=False, nullable=False)
 
     # Metadata
+    position = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=local_now, nullable=False)
 
     # Relationships
     stock_item = db.relationship("StockItem", foreign_keys=[stock_item_id], lazy="joined")
     warehouse = db.relationship("Warehouse", foreign_keys=[warehouse_id], lazy="joined")
 
-    def __init__(self, quote_id, description, quantity, unit_price, unit=None, stock_item_id=None, warehouse_id=None):
+    def __init__(
+        self,
+        quote_id,
+        description,
+        quantity,
+        unit_price,
+        unit=None,
+        stock_item_id=None,
+        warehouse_id=None,
+        position=0,
+    ):
         self.quote_id = quote_id
         self.description = description.strip()
         self.quantity = Decimal(str(quantity))
@@ -427,6 +458,7 @@ class QuoteItem(db.Model):
         self.stock_item_id = stock_item_id
         self.warehouse_id = warehouse_id
         self.is_stock_item = stock_item_id is not None
+        self.position = int(position) if position is not None else 0
 
     def __repr__(self):
         return f"<QuoteItem {self.description} ({self.quantity} @ {self.unit_price})>"
@@ -444,6 +476,7 @@ class QuoteItem(db.Model):
             "stock_item_id": self.stock_item_id,
             "warehouse_id": self.warehouse_id,
             "is_stock_item": self.is_stock_item,
+            "position": self.position,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
