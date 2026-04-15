@@ -250,6 +250,15 @@ class ToastNotificationManager {
                 opacity: '0.95',
                 textDecoration: 'underline'
             });
+            if (config.actionLink === '__support_modal__') {
+                actionLink.href = '#';
+                actionLink.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    if (typeof window.openSupportModal === 'function') {
+                        window.openSupportModal();
+                    }
+                });
+            }
             content.appendChild(actionLink);
         }
 

@@ -144,6 +144,9 @@ class User(UserMixin, db.Model):
     ui_show_kiosk = db.Column(db.Boolean, default=True, nullable=False)  # Show/hide Kiosk Mode
     ui_show_donate = db.Column(db.Boolean, default=True, nullable=False)  # Show/hide donate/support UI
 
+    # Support UX: count of report generations (exports + custom report views) for stats in support modal
+    support_stats_reports_generated = db.Column(db.Integer, default=0, nullable=False)
+
     # Relationships
     time_entries = db.relationship("TimeEntry", backref="user", lazy="dynamic", cascade="all, delete-orphan")
     project_costs = db.relationship("ProjectCost", backref="user", lazy="dynamic", cascade="all, delete-orphan")

@@ -218,7 +218,7 @@ def settings():
 @user_bp.route("/settings/license", methods=["GET", "POST"])
 @login_required
 def license():
-    """License management page: show status, enter key, validate (sets donate_ui_hidden for instance)."""
+    """License management: supporter key validation (sets donate_ui_hidden / supporter instance flag)."""
     settings_obj = Settings.get_settings()
     if request.method == "POST":
         if is_license_activated(settings_obj):
