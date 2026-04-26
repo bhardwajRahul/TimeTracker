@@ -37,7 +37,7 @@ Install Docker for your platform: [Docker Installation Guide](https://docs.docke
 4. Start the stack:
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 5. Open **https://localhost** in your browser. The first run may show a self-signed certificate warning; proceed to continue.
@@ -69,6 +69,8 @@ For production:
 - Use a strong **SECRET_KEY** and keep `.env` out of version control.
 - Prefer **PostgreSQL** (included in the default Docker Compose setup).
 - Put the app behind HTTPS (reverse proxy or Docker with HTTPS compose).
+
+> Note: The default `docker-compose.yml` requires `SECRET_KEY` to be set (32+ chars). If it is missing, `docker compose` will error during interpolation.
 
 Detailed steps and options:
 

@@ -1126,6 +1126,11 @@
                             <i class="fas fa-life-ring"></i>
                         </a>
                         {% if current_user.is_authenticated %}
+                        <button type="button" data-ai-helper-open class="flex items-center justify-center w-9 h-9 rounded-lg text-text-light dark:text-text-dark hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/50" aria-label="{{ _('AI Helper') }}" title="{{ _('AI Helper') }}">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                        </button>
+                        {% endif %}
+                        {% if current_user.is_authenticated %}
                         <button type="button" id="headerSupportBtn" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-amber-800 dark:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 dark:border-amber-500/40 focus:outline-none focus:ring-2 focus:ring-amber-500/40" title="{{ _('Support TimeTracker') }}">
                             <i class="fas fa-heart text-amber-600 dark:text-amber-300" aria-hidden="true"></i>
                             <span class="max-w-[10rem] truncate">{{ _('Support TimeTracker') }}</span>
@@ -1334,6 +1339,41 @@
         {% include 'components/support_modal.html' %}
         {% endif %}
 
+        {% if current_user.is_authenticated %}
+        {# Avoid overlapping admin version update card (also bottom-20 right-4). #}
+        <div id="aiHelperRoot" class="fixed {% if is_admin_user %}bottom-36{% else %}bottom-20{% endif %} right-4 z-[70]">
+            <button type="button" data-ai-helper-open class="inline-flex items-center gap-2 rounded-full bg-primary text-white px-4 py-3 shadow-xl hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50" aria-label="{{ _('Open AI Helper') }}">
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <span class="hidden sm:inline">{{ _('AI Helper') }}</span>
+            </button>
+        </div>
+        <div id="aiHelperBackdrop" class="hidden fixed inset-0 z-[80] bg-black/30" data-ai-helper-close></div>
+        <section id="aiHelperDrawer" class="hidden fixed inset-y-0 right-0 z-[90] w-full max-w-xl bg-card-light dark:bg-card-dark border-l border-border-light dark:border-border-dark shadow-2xl flex flex-col" aria-label="{{ _('AI Helper') }}" role="dialog" aria-modal="true">
+            <header class="p-4 border-b border-border-light dark:border-border-dark flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-text-light dark:text-text-dark">{{ _('AI Helper') }}</h2>
+                    <p id="aiHelperProvider" class="text-xs text-text-muted-light dark:text-text-muted-dark">{{ _('Ask about your tracked work, summaries, gaps, and next actions.') }}</p>
+                </div>
+                <button type="button" data-ai-helper-close class="p-2 rounded-lg hover:bg-background-light dark:hover:bg-background-dark" aria-label="{{ _('Close') }}">&times;</button>
+            </header>
+            <div class="p-4 border-b border-border-light dark:border-border-dark">
+                <details class="text-sm">
+                    <summary class="cursor-pointer font-medium text-text-light dark:text-text-dark">{{ _('Context included') }}</summary>
+                    <pre id="aiHelperContext" class="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-background-light dark:bg-background-dark p-3 text-xs text-text-muted-light dark:text-text-muted-dark">{{ _('Loading context preview...') }}</pre>
+                </details>
+            </div>
+            <div id="aiHelperMessages" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+            <div id="aiHelperActions" class="hidden border-t border-border-light dark:border-border-dark p-4 space-y-2"></div>
+            <form id="aiHelperForm" class="border-t border-border-light dark:border-border-dark p-4 space-y-3">
+                <textarea id="aiHelperPrompt" rows="3" class="form-input w-full" placeholder="{{ _('Ask: What did I work on this week? Draft a time entry from these notes...') }}"></textarea>
+                <div class="flex items-center justify-between gap-3">
+                    <p id="aiHelperStatus" class="text-xs text-text-muted-light dark:text-text-muted-dark"></p>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">{{ _('Send') }}</button>
+                </div>
+            </form>
+        </section>
+        {% endif %}
+
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/js/all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
@@ -1354,6 +1394,7 @@
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='floating-timer-bar.js') }}"></script>
     <script src="{{ url_for('static', filename='idle.js') }}"></script>
+    <script src="{{ url_for('static', filename='ai-helper.js') }}?v={{ app_version }}-ai1"></script>
     {% endif %}
     {% if is_admin_user %}
     <script src="{{ url_for('static', filename='admin-version-update.js') }}?v={{ app_version }}"></script>

@@ -59,6 +59,149 @@ def _login_template_vars():
     return vars
 
 
+def _password_reset_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+
+    return URLSafeTimedSerializer(Config.SECRET_KEY, salt="timetracker:password-reset:v1")
+
+
+def _make_password_reset_token(user: User) -> str:
+    s = _password_reset_serializer()
+    return s.dumps({"uid": user.id, "ph": user.password_hash or ""})
+
+
+def _verify_password_reset_token(token: str, *, max_age_seconds: int) -> User | None:
+    from itsdangerous import BadSignature, SignatureExpired
+
+    s = _password_reset_serializer()
+    try:
+        data = s.loads(token, max_age=max_age_seconds)
+    except (SignatureExpired, BadSignature):
+        return None
+    try:
+        uid = int(data.get("uid"))
+    except Exception:
+        return None
+    ph = (data.get("ph") or "").strip()
+    user = User.query.get(uid)
+    if not user or not user.is_active:
+        return None
+    # Invalidate token when password changed since token creation.
+    if (user.password_hash or "") != ph:
+        return None
+    return user
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.dashboard"))
+
+    # Password reset only makes sense for password-based modes.
+    try:
+        auth_method = (current_app.config.get("AUTH_METHOD", "local") or "local").strip().lower()
+    except Exception:
+        auth_method = "local"
+    if auth_method not in ("local", "both"):
+        flash(_("Password reset is not available for this authentication method."), "warning")
+        return redirect(url_for("auth.login"))
+
+    if current_app.config.get("DEMO_MODE"):
+        flash(_("Demo mode: password reset is disabled."), "warning")
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        identifier = (request.form.get("identifier") or "").strip()
+        # Do not reveal whether a user exists.
+        flash(
+            _(
+                "If an account matches what you entered and email is configured, you'll receive a reset link shortly."
+            ),
+            "info",
+        )
+
+        try:
+            from app.utils.validation import sanitize_input
+
+            identifier = sanitize_input(identifier, max_length=200).strip().lower()
+        except Exception:
+            identifier = (identifier or "").strip().lower()
+
+        user = None
+        if identifier:
+            user = User.query.filter((User.username == identifier) | (User.email == identifier)).first()
+
+        if user and user.is_active and user.email:
+            try:
+                token = _make_password_reset_token(user)
+                reset_url = url_for("auth.reset_password", token=token, _external=True)
+
+                from app.utils.email import send_email
+
+                subject = _("Reset your TimeTracker password")
+                text_body = _(
+                    "A password reset was requested for your account.\n\n"
+                    "Use this link to set a new password:\n"
+                    "%(url)s\n\n"
+                    "If you did not request this, you can ignore this email.",
+                    url=reset_url,
+                )
+                html_body = render_template("auth/emails/password_reset.html", reset_url=reset_url, user=user)
+                send_email(subject=subject, recipients=[user.email], text_body=text_body, html_body=html_body)
+                log_event("auth.password_reset_requested", user_id=user.id)
+            except Exception:
+                # Never leak details; logging handled by email util.
+                pass
+
+        return redirect(url_for("auth.login"))
+
+    return render_template("auth/forgot_password.html")
+
+
+@auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def reset_password(token: str):
+    if current_user.is_authenticated:
+        return redirect(url_for("main.dashboard"))
+
+    if current_app.config.get("DEMO_MODE"):
+        flash(_("Demo mode: password reset is disabled."), "warning")
+        return redirect(url_for("auth.login"))
+
+    max_age = int(getattr(Config, "PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS", 3600) or 3600)
+    user = _verify_password_reset_token(token, max_age_seconds=max_age)
+    if not user:
+        flash(_("This reset link is invalid or has expired. Please request a new one."), "error")
+        return redirect(url_for("auth.forgot_password"))
+
+    if request.method == "POST":
+        new_password = (request.form.get("new_password") or "").strip()
+        confirm_password = (request.form.get("confirm_password") or "").strip()
+
+        if not new_password or len(new_password) < 8:
+            flash(_("Password must be at least 8 characters long."), "error")
+            return render_template("auth/reset_password.html", token=token)
+        if new_password != confirm_password:
+            flash(_("Passwords do not match."), "error")
+            return render_template("auth/reset_password.html", token=token)
+
+        try:
+            user.set_password(new_password)
+            user.password_change_required = False
+            db.session.add(user)
+            db.session.commit()
+            log_event("auth.password_reset_completed", user_id=user.id)
+            flash(_("Your password has been updated. You can now sign in."), "success")
+            return redirect(url_for("auth.login"))
+        except Exception:
+            db.session.rollback()
+            flash(_("Could not reset password due to a database error."), "error")
+            return render_template("auth/reset_password.html", token=token)
+
+    return render_template("auth/reset_password.html", token=token)
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"])  # rate limit login attempts
 def login():
@@ -266,6 +409,17 @@ def login():
                 # This mode is for trusted environments only
                 pass
 
+            # If 2FA is enabled for this user, require TOTP verification before creating a session.
+            if getattr(user, "two_factor_enabled", False):
+                session["pre_2fa_user_id"] = user.id
+                # Preserve intended redirect
+                next_page = request.args.get("next")
+                if next_page and next_page.startswith("/"):
+                    session["pre_2fa_next"] = next_page
+                else:
+                    session.pop("pre_2fa_next", None)
+                return redirect(url_for("auth.two_factor"))
+
             from app.telemetry.otel_setup import business_span
 
             with business_span("auth.login", user_id=user.id, auth_method=auth_method):
@@ -308,6 +462,15 @@ def login():
                 flash(_("You must change your password before continuing."), "warning")
                 return redirect(url_for("auth.change_password"))
 
+            # Optionally enforce 2FA for admins (after login; they will be prompted to enroll).
+            try:
+                require_admin_2fa = bool(getattr(Config, "REQUIRE_2FA_FOR_ADMINS", False))
+            except Exception:
+                require_admin_2fa = False
+            if require_admin_2fa and user.role == "admin" and not getattr(user, "two_factor_enabled", False):
+                flash(_("Administrator accounts must enable two-factor authentication."), "warning")
+                return redirect(url_for("auth.two_factor_setup"))
+
             # Redirect to intended page or dashboard
             next_page = request.args.get("next")
             if not next_page or not next_page.startswith("/"):
@@ -322,6 +485,144 @@ def login():
             return render_template("auth/login.html", **_login_template_vars())
 
     return render_template("auth/login.html", **_login_template_vars())
+
+
+@auth_bp.route("/login/2fa", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def two_factor():
+    if current_user.is_authenticated:
+        return redirect(url_for("main.dashboard"))
+
+    user_id = session.get("pre_2fa_user_id")
+    if not user_id:
+        flash(_("Your login session expired. Please sign in again."), "error")
+        return redirect(url_for("auth.login"))
+
+    user = User.query.get(int(user_id))
+    if not user or not user.is_active or not getattr(user, "two_factor_enabled", False):
+        session.pop("pre_2fa_user_id", None)
+        session.pop("pre_2fa_next", None)
+        flash(_("Your login session expired. Please sign in again."), "error")
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        code = (request.form.get("code") or "").strip().replace(" ", "")
+        try:
+            import pyotp
+
+            totp = pyotp.TOTP(user.get_two_factor_secret())
+            ok = bool(code) and totp.verify(code, valid_window=1)
+        except Exception:
+            ok = False
+
+        if not ok:
+            flash(_("Invalid authentication code."), "error")
+            return render_template("auth/two_factor.html")
+
+        # Success: finalize login
+        session.pop("pre_2fa_user_id", None)
+        next_page = session.pop("pre_2fa_next", None)
+        login_user(user, remember=True)
+        log_event("auth.login_2fa", user_id=user.id)
+
+        if next_page and next_page.startswith("/"):
+            return redirect(next_page)
+        return redirect(url_for("main.dashboard"))
+
+    return render_template("auth/two_factor.html")
+
+
+@auth_bp.route("/profile/2fa", methods=["GET", "POST"])
+@login_required
+def two_factor_setup():
+    """
+    User self-service TOTP enrollment/disable.
+    """
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+        code = (request.form.get("code") or "").strip().replace(" ", "")
+
+        if action == "enable":
+            # Ensure a secret exists
+            if not (current_user.two_factor_secret or "").strip():
+                import pyotp
+
+                current_user.set_two_factor_secret(pyotp.random_base32())
+                db.session.add(current_user)
+                db.session.commit()
+
+            try:
+                import pyotp
+
+                totp = pyotp.TOTP(current_user.get_two_factor_secret())
+                ok = bool(code) and totp.verify(code, valid_window=1)
+            except Exception:
+                ok = False
+
+            if not ok:
+                flash(_("Invalid authentication code."), "error")
+                return redirect(url_for("auth.two_factor_setup"))
+
+            current_user.two_factor_enabled = True
+            current_user.two_factor_confirmed_at = datetime.utcnow()
+            try:
+                db.session.add(current_user)
+                db.session.commit()
+                log_event("auth.2fa_enabled", user_id=current_user.id)
+                flash(_("Two-factor authentication enabled."), "success")
+            except Exception:
+                db.session.rollback()
+                flash(_("Could not enable two-factor authentication due to a database error."), "error")
+            return redirect(url_for("auth.two_factor_setup"))
+
+        if action == "disable":
+            if not getattr(current_user, "two_factor_enabled", False):
+                return redirect(url_for("auth.two_factor_setup"))
+
+            try:
+                import pyotp
+
+                totp = pyotp.TOTP(current_user.get_two_factor_secret())
+                ok = bool(code) and totp.verify(code, valid_window=1)
+            except Exception:
+                ok = False
+
+            if not ok:
+                flash(_("Invalid authentication code."), "error")
+                return redirect(url_for("auth.two_factor_setup"))
+
+            current_user.two_factor_enabled = False
+            current_user.two_factor_confirmed_at = None
+            current_user.two_factor_secret = None
+            try:
+                db.session.add(current_user)
+                db.session.commit()
+                log_event("auth.2fa_disabled", user_id=current_user.id)
+                flash(_("Two-factor authentication disabled."), "success")
+            except Exception:
+                db.session.rollback()
+                flash(_("Could not disable two-factor authentication due to a database error."), "error")
+            return redirect(url_for("auth.two_factor_setup"))
+
+    # Ensure there is a secret available for enrollment preview.
+    secret = current_user.get_two_factor_secret()
+    provisioning_uri = ""
+    if secret:
+        try:
+            import pyotp
+
+            provisioning_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+                name=current_user.username, issuer_name="TimeTracker"
+            )
+        except Exception:
+            provisioning_uri = ""
+
+    return render_template(
+        "auth/two_factor_setup.html",
+        two_factor_enabled=getattr(current_user, "two_factor_enabled", False),
+        secret=secret,
+        provisioning_uri=provisioning_uri,
+    )
 
 
 @auth_bp.route("/logout")

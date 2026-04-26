@@ -110,6 +110,14 @@ All environment variables can be provided via `.env` and are consumed by the `ap
 - OIDC_ADMIN_EMAILS: Optional comma-separated admin emails.
 - OIDC_POST_LOGOUT_REDIRECT_URI: Optional RP-initiated logout return URI.
 
+### Security hardening
+
+- SETTINGS_ENCRYPTION_KEY: Fernet key to encrypt secrets stored in the database (recommended). Used for things like SMTP password, OAuth client secrets, Peppol access point token, AI API key, and TOTP 2FA secrets. No default.
+  - Generate with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- SETTINGS_ENCRYPTION_KEY_FILE: Alternative to `SETTINGS_ENCRYPTION_KEY` (reads first line of the file).
+- PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS: Password reset link lifetime in seconds. Default: `3600`.
+- REQUIRE_2FA_FOR_ADMINS: When `true`, admin users are prompted to enroll in TOTP 2FA after login. Default: `false`.
+
 ### CSRF and Cookies
 - WTF_CSRF_ENABLED: Enable CSRF protection. Default: `true` (example) or `false` in dev.
 - WTF_CSRF_TIME_LIMIT: Token lifetime (seconds). Default: `3600`.

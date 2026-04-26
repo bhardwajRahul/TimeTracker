@@ -1234,12 +1234,21 @@ def manage_modules():
             flash(_("Module visibility updated successfully"), "success")
             return redirect(url_for("admin.manage_modules"))
 
+    # Optional module load diagnostics captured during blueprint registration.
+    try:
+        from flask import current_app
+
+        blueprint_load_status = current_app.extensions.get("blueprint_load_status", []) or []
+    except Exception:
+        blueprint_load_status = []
+
     return render_template(
         "admin/modules.html",
         modules_by_category=modules_by_category,
         ModuleCategory=ModuleCategory,
         settings=settings_obj,
         clients=clients,
+        blueprint_load_status=blueprint_load_status,
     )
 
 
@@ -1254,6 +1263,7 @@ def settings():
     installation_config = get_installation_config()
     timezones = get_available_timezones()
     peppol_env_enabled = (os.getenv("PEPPOL_ENABLED", "false") or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+    ai_config = settings_obj.get_ai_config()
 
     # Sync analytics preference from installation config to database on load
     # (installation config is the source of truth for telemetry)
@@ -1286,6 +1296,7 @@ def settings():
                 timezones=timezones,
                 kiosk_settings=kiosk_settings,
                 peppol_env_enabled=peppol_env_enabled,
+                ai_config=ai_config,
                 system_instance_id=system_instance_id,
             )
 
@@ -1332,6 +1343,7 @@ def settings():
                 timezones=timezones,
                 kiosk_settings=kiosk_settings,
                 peppol_env_enabled=peppol_env_enabled,
+                ai_config=ai_config,
                 system_instance_id=system_instance_id,
             )
         # #region agent log
@@ -1381,7 +1393,7 @@ def settings():
 
             token = (request.form.get("peppol_access_point_token", "") or "").strip()
             if token:
-                settings_obj.peppol_access_point_token = token
+                settings_obj.set_secret("peppol_access_point_token", token)
 
             try:
                 settings_obj.peppol_access_point_timeout = int(request.form.get("peppol_access_point_timeout", 30))
@@ -1435,6 +1447,40 @@ def settings():
         except (AttributeError, ValueError, TypeError):
             pass
 
+        # Update AI helper settings (server-side provider config; secrets are not exposed to clients)
+        try:
+            ai_enabled_mode = (request.form.get("ai_enabled_mode") or "env").strip().lower()
+            if ai_enabled_mode == "true":
+                settings_obj.ai_enabled = True
+            elif ai_enabled_mode == "false":
+                settings_obj.ai_enabled = False
+            else:
+                settings_obj.ai_enabled = None
+
+            ai_provider = (request.form.get("ai_provider") or "ollama").strip().lower()
+            if ai_provider not in ("ollama", "openai_compatible"):
+                ai_provider = "ollama"
+            settings_obj.ai_provider = ai_provider
+            settings_obj.ai_base_url = (request.form.get("ai_base_url") or "").strip()
+            settings_obj.ai_model = (request.form.get("ai_model") or "").strip()
+            if request.form.get("ai_clear_api_key") == "on":
+                settings_obj.set_secret("ai_api_key", "")
+            else:
+                ai_api_key = (request.form.get("ai_api_key") or "").strip()
+                if ai_api_key:
+                    settings_obj.set_secret("ai_api_key", ai_api_key)
+            try:
+                settings_obj.ai_timeout_seconds = max(1, min(300, int(request.form.get("ai_timeout_seconds") or 30)))
+            except (TypeError, ValueError):
+                settings_obj.ai_timeout_seconds = None
+            try:
+                settings_obj.ai_context_limit = max(5, min(200, int(request.form.get("ai_context_limit") or 40)))
+            except (TypeError, ValueError):
+                settings_obj.ai_context_limit = None
+            settings_obj.ai_system_prompt = (request.form.get("ai_system_prompt") or "").strip()
+        except AttributeError:
+            pass
+
         # Update privacy and analytics settings
         allow_analytics = request.form.get("allow_analytics") == "on"
         old_analytics_state = settings_obj.allow_analytics
@@ -1462,6 +1508,7 @@ def settings():
                 timezones=timezones,
                 kiosk_settings=kiosk_settings,
                 peppol_env_enabled=peppol_env_enabled,
+                ai_config=ai_config,
                 system_instance_id=system_instance_id,
             )
         # #region agent log
@@ -1501,12 +1548,14 @@ def settings():
     }
 
     system_instance_id = Settings.get_system_instance_id()
+    ai_config = settings_obj.get_ai_config()
     return render_template(
         "admin/settings.html",
         settings=settings_obj,
         timezones=timezones,
         kiosk_settings=kiosk_settings,
         peppol_env_enabled=peppol_env_enabled,
+        ai_config=ai_config,
         system_instance_id=system_instance_id,
     )
 
@@ -4885,7 +4934,7 @@ def save_email_config():
     # Only update password if provided (non-empty)
     password = data.get("password", "").strip()
     if password:
-        settings.mail_password = password
+        settings.set_secret("mail_password", password)
         current_app.logger.info("[EMAIL CONFIG] Password updated")
 
     settings.mail_default_sender = data.get("default_sender", "").strip()

@@ -238,6 +238,11 @@ class Config:
     GITHUB_RELEASES_TOKEN = os.getenv("GITHUB_RELEASES_TOKEN", "").strip() or None
     ENABLE_PRE_RELEASE_NOTIFICATIONS = os.getenv("ENABLE_PRE_RELEASE_NOTIFICATIONS", "false").lower() == "true"
 
+    # Settings secrets encryption (recommended for production).
+    # Generate a key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    SETTINGS_ENCRYPTION_KEY = (os.getenv("SETTINGS_ENCRYPTION_KEY") or "").strip() or None
+    SETTINGS_ENCRYPTION_KEY_FILE = (os.getenv("SETTINGS_ENCRYPTION_KEY_FILE") or "").strip() or None
+
     # Smart in-app notifications (GET /api/notifications); times are HH:MM 24h in user's timezone.
     SMART_NOTIFY_MAX_PER_DAY = max(1, min(10, int(os.getenv("SMART_NOTIFY_MAX_PER_DAY", "2"))))
     SMART_NOTIFY_NO_TRACKING_AFTER = os.getenv("SMART_NOTIFY_NO_TRACKING_AFTER", "16:00").strip()
@@ -245,6 +250,25 @@ class Config:
     SMART_NOTIFY_LONG_TIMER_HOURS = float(os.getenv("SMART_NOTIFY_LONG_TIMER_HOURS", "4"))
     # Fire time-based kinds only during the first N minutes of the configured hour (same idea as email remind-to-log).
     SMART_NOTIFY_SCHEDULER_SLOT_MINUTES = max(1, min(59, int(os.getenv("SMART_NOTIFY_SCHEDULER_SLOT_MINUTES", "30"))))
+
+    # AI helper (server-side provider configuration; keys are never sent to clients)
+    AI_ENABLED = os.getenv("AI_ENABLED", "false").lower() == "true"
+    AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").strip().lower()
+    AI_BASE_URL = os.getenv("AI_BASE_URL", "http://127.0.0.1:11434").strip()
+    AI_MODEL = os.getenv("AI_MODEL", "llama3.1").strip()
+    AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
+    AI_TIMEOUT_SECONDS = max(1, int(os.getenv("AI_TIMEOUT_SECONDS", "30")))
+    AI_CONTEXT_LIMIT = max(5, int(os.getenv("AI_CONTEXT_LIMIT", "40")))
+    AI_SYSTEM_PROMPT = os.getenv(
+        "AI_SYSTEM_PROMPT",
+        "You are TimeTracker's AI helper. Be concise, explain assumptions, and return suggested actions only when the user asks for changes.",
+    ).strip()
+
+    # Password reset
+    PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS = max(300, int(os.getenv("PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS", "3600")))
+
+    # Two-factor authentication (TOTP)
+    REQUIRE_2FA_FOR_ADMINS = os.getenv("REQUIRE_2FA_FOR_ADMINS", "false").lower() == "true"
 
 
 class DevelopmentConfig(Config):

@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.models.time_entry import local_now
 from app.services.global_search_service import run_global_search
+from app.services.llm_service import AIServiceError, LLMService
 from app.services.time_tracking_service import TimeTrackingService
 from app.utils.api_deprecation import deprecated_session_api
 from app.utils.db import safe_commit
@@ -34,11 +35,62 @@ from app.utils.timezone import convert_app_datetime_to_user, parse_local_datetim
 api_bp = Blueprint("api", __name__)
 
 
+def _ai_error_response(exc: AIServiceError):
+    return jsonify({"ok": False, "error": exc.message, "error_code": exc.code}), exc.status_code
+
+
 @api_bp.route("/api/health")
 @deprecated_session_api("/api/v1/health")
 def health_check():
     """Health check endpoint for monitoring and error handling"""
     return jsonify({"status": "ok", "timestamp": datetime.utcnow().isoformat()})
+
+
+@api_bp.route("/api/ai/context-preview")
+@login_required
+def ai_context_preview():
+    """Return the compact context preview that would be sent to the configured AI provider."""
+    try:
+        service = LLMService()
+        return jsonify({"ok": True, "context": service.context_preview(current_user), "provider": service.config.public_dict()})
+    except AIServiceError as exc:
+        return _ai_error_response(exc)
+
+
+@api_bp.route("/api/ai/test", methods=["POST"])
+@login_required
+def ai_test_connection():
+    """Test the configured AI provider. Admins/settings managers can use this from settings."""
+    if not (current_user.is_admin or current_user.has_permission("manage_settings")):
+        return jsonify({"ok": False, "error": "Admin permission required", "error_code": "forbidden"}), 403
+    try:
+        return jsonify(LLMService().test_connection())
+    except AIServiceError as exc:
+        return _ai_error_response(exc)
+
+
+@api_bp.route("/api/ai/chat", methods=["POST"])
+@login_required
+def ai_chat():
+    """Chat with the AI helper using server-built TimeTracker context."""
+    data = request.get_json(silent=True) or {}
+    try:
+        result = LLMService().chat(current_user, data.get("prompt") or "", data.get("history") or [])
+        return jsonify({"ok": True, **result})
+    except AIServiceError as exc:
+        return _ai_error_response(exc)
+
+
+@api_bp.route("/api/ai/actions/confirm", methods=["POST"])
+@login_required
+def ai_confirm_action():
+    """Execute a user-confirmed AI proposed action."""
+    data = request.get_json(silent=True) or {}
+    try:
+        result = LLMService().confirm_action(current_user, data.get("action") or {})
+        return jsonify(result)
+    except AIServiceError as exc:
+        return _ai_error_response(exc)
 
 
 def _effective_user_for_version_api():

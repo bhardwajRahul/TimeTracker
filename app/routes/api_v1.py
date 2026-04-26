@@ -157,6 +157,7 @@ def api_info():
                 "favorites": "/api/v1/users/me/favorites/projects",
                 "activities": "/api/v1/activities",
                 "audit_logs": "/api/v1/audit-logs",
+                "ai": "/api/v1/ai/chat",
                 "invoice_pdf_templates": "/api/v1/invoice-pdf-templates",
                 "invoice_templates": "/api/v1/invoice-templates",
                 "webhooks": "/api/v1/webhooks",

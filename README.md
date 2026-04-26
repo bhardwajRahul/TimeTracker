@@ -702,6 +702,26 @@ docker-compose -f docker/docker-compose.remote.yml up -d
 
 > **⚠️ Security Note:** Always set a unique `SECRET_KEY` in production! See [CSRF Configuration](docs/admin/security/CSRF_CONFIGURATION.md) for details.
 
+## AI Helper (Ollama or hosted)
+
+TimeTracker includes an optional **server-side AI helper** for the web app and API clients.
+
+- **Enable**: set `AI_ENABLED=true`
+- **Ollama (default)**: set `AI_PROVIDER=ollama`, `AI_BASE_URL=http://127.0.0.1:11434`, `AI_MODEL=...`
+- **Hosted OpenAI-compatible**: set `AI_PROVIDER=openai_compatible` and `AI_API_KEY=...`
+
+The AI helper is exposed as:
+
+- Session web UI JSON: `POST /api/ai/chat` (same-origin, login required)
+- REST API v1: `POST /api/v1/ai/chat` (API token required, scopes `read:ai`/`write:ai`)
+
+### Encrypting stored secrets (recommended)
+
+To store sensitive settings (OAuth secrets, mail password, AI API key, Peppol token, 2FA secret) encrypted at rest, set:
+
+- `SETTINGS_ENCRYPTION_KEY` (Fernet key), or
+- `SETTINGS_ENCRYPTION_KEY_FILE` (file path with the key on the first line)
+
 ### Raspberry Pi Deployment
 TimeTracker runs perfectly on Raspberry Pi 4 (2GB+ RAM):
 ```bash

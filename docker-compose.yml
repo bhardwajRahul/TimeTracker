@@ -57,7 +57,9 @@ services:
       # 5. Check the token hasn't expired (increase WTF_CSRF_TIME_LIMIT if needed)
       # 6. If accessing via IP (not localhost): WTF_CSRF_SSL_STRICT=false
       # For details: docs/CSRF_CONFIGURATION.md and docs/CSRF_IP_ACCESS_GUIDE.md
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
+      # NOTE: In production, the app refuses to start with an invalid/short SECRET_KEY.
+      # Provide it via your shell env or a .env file (recommended).
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY to a random 32+ char string}
       # Disable strict Referer check by default to avoid privacy/port issues
       - WTF_CSRF_SSL_STRICT=${WTF_CSRF_SSL_STRICT:-true}
       - WTF_CSRF_ENABLED=${WTF_CSRF_ENABLED:-true}
