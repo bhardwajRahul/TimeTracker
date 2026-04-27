@@ -150,6 +150,7 @@ def api_info():
                 "recurring_invoices": "/api/v1/recurring-invoices",
                 "credit_notes": "/api/v1/credit-notes",
                 "client_notes": "/api/v1/clients/<client_id>/notes",
+                "client_invoice_unbilled": "/api/v1/clients/<client_id>/invoice-unbilled",
                 "project_costs": "/api/v1/projects/<project_id>/costs",
                 "tax_rules": "/api/v1/tax-rules",
                 "currencies": "/api/v1/currencies",
