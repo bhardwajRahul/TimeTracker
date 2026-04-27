@@ -275,7 +275,7 @@ TimeTracker includes **130+ features** across 13 major categories. See the [Comp
 - **Command Palette** — Keyboard-driven navigation with shortcuts (Ctrl+K / Cmd+K) ([Guide](docs/COMMAND_PALETTE_USAGE.md))
 - **Keyboard Shortcuts** — 50+ shortcuts for lightning-fast navigation and actions
 - **Quick Search** — Enhanced instant search with autocomplete and categorized results (Ctrl+K)
-- **Quick Actions Menu** — Floating action button with 6 quick actions (bottom-right)
+- **Floating quick hub** — Bottom-right dock: unified Actions menu (timer, log time, new task/project/client, reports), optional team chat toggle with a fixed viewport panel, and AI Helper; see [UI guidelines](docs/UI_GUIDELINES.md#floating-hub-authenticated-layout)
 - **Enhanced Data Tables** — Sortable, filterable, inline-editable tables with bulk operations
 - **Email Notifications** — Configurable email alerts for tasks, invoices, and more
 - **Toast Notifications** — Beautiful in-app notifications; **post-timer toast** shows "Logged Xh on Project" with link to time entries

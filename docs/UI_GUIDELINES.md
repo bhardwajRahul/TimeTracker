@@ -50,12 +50,13 @@ Use the `page_header` macro from `app/templates/components/ui.html` on every mai
 - **Components:** Use `modal` and `confirm_dialog` from `components/ui.html`. Ensure focus is trapped inside when open and restored on close.
 - **Start Timer modal:** Same pattern; single primary “Start” action; progressive disclosure (project/client → task → notes/tags) where possible.
 
-### Global FAB (quick time actions)
+### Floating hub (authenticated layout)
 
-- **Where:** Authenticated layout in `app/templates/base.html` (`#globalTimeFab`), bottom-right (`fixed`, `z-40`), with a popover above the button (scale + opacity transition; `prefers-reduced-motion` reduces motion).
-- **Behavior:** Start Timer (clicks `#openStartTimer` on the dashboard when present, otherwise navigates to the dashboard with `#start-timer` so the modal opens), Log Time (manual entry page), New Task (task create page). Outside click and Escape close the menu.
-- **Desktop:** When the header floating timer shows an active session (`floating-timer-bar.js`), the FAB is hidden from the `md` breakpoint up via `body.fab-hide-desktop-timer-active` so it does not duplicate stop/resume controls.
-- **Script:** `app/static/global-fab.js` (loaded from `base.html`).
+- **Where:** Authenticated layout in `app/templates/base.html`: `#fabDock` is a single `position: fixed` column (`flex-direction: column-reverse`) at the bottom-right, with shared CSS variables (`--fab-size`, `--fab-gap`, `--fab-edge`, `--fab-menu-gap`) for spacing. RTL mirrors to the bottom-left.
+- **Controls:** (1) **Actions** — `#unifiedActionsRoot` / `#unifiedActionsFab` opens `#unifiedActionsMenu` above the button; URLs come from `data-*` attributes on `#fabDock`. (2) **Team chat** (when `team_chat` is enabled) — `#persistentChatWidget` / `#chatWidgetToggle`; `#chatWidgetPanel` is a **fixed** overlay (`z-index: 85`) aligned to the viewport edge so dock items cannot stack on top of it. (3) **AI Helper** — `#aiHelperRoot` / `#aiHelperFab` (circular FAB, same footprint as chat/actions) opens the existing drawer/backdrop (`ai-helper.js`).
+- **Behavior:** `app/static/floating-actions.js` toggles the actions menu, handles outside click and Escape, and runs Start Timer (same `#openStartTimer` / dashboard `#start-timer` fallback as before), Log Time, New Task, New Project, New Client, and Reports. While the menu is open, `#fabDock` gets `fab-dock--menu-open` so other dock children fade and ignore pointer events.
+- **Admin:** `#fabDock` can use `fab-dock--admin` to lift above the admin version banner; `body.fab-dock-admin` adjusts the chat panel bottom offset the same way.
+- **Legacy scripts:** `app/static/global-fab.js` and `app/static/quick-actions.js` are no longer included from `base.html`; the web hub is implemented in markup plus `floating-actions.js`.
 
 ### Time entries table (inline edit)
 
@@ -99,7 +100,7 @@ Use the `page_header` macro from `app/templates/components/ui.html` on every mai
 | Components | `app/templates/components/ui.html`, `app/templates/components/cards.html` |
 | Dashboard | `app/templates/main/dashboard.html`, `app/static/dashboard-enhancements.js` (value dashboard, week comparison chart, …) |
 | Timer flow | `app/templates/timer/timer_page.html`, Start Timer modal (dashboard), `app/static/floating-timer-bar.js` |
-| Global FAB | `app/templates/base.html`, `app/static/global-fab.js` |
+| Floating hub (actions, chat, AI) | `app/templates/base.html`, `app/templates/components/persistent_chat_widget.html`, `app/static/floating-actions.js`, `app/static/ai-helper.js` |
 | Time entries | `app/templates/timer/time_entries_overview.html`, `app/templates/timer/_time_entries_list.html`, `app/static/time-entries-inline-edit.js` |
 
 For accessibility and quality checks, see [FRONTEND_QUALITY_GATES.md](development/FRONTEND_QUALITY_GATES.md).

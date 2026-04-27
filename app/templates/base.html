@@ -235,34 +235,119 @@
         .dark #sidebar::-webkit-scrollbar-thumb:hover {
             background-color: rgba(156, 163, 175, 0.5);
         }
-        /* Global time FAB: hide on desktop when header timer is active (see floating-timer-bar.js) */
-        @media (min-width: 768px) {
-            body.fab-hide-desktop-timer-active #globalTimeFab {
-                display: none;
-            }
-        }
-        #globalTimeFab .global-fab__popover {
-            transform-origin: bottom right;
-            transform: scale(0.92);
-            opacity: 0;
+        /* Bottom-right floating hub: one deterministic dock, one actions menu. */
+        #fabDock {
+            --fab-size: 3.5rem;
+            --fab-gap: 0.75rem;
+            --fab-edge: 1.25rem;
+            --fab-menu-gap: 0.75rem;
+            position: fixed;
+            right: var(--fab-edge);
+            bottom: var(--fab-edge);
+            z-index: 65;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: flex-end;
+            gap: var(--fab-gap);
             pointer-events: none;
-            transition: transform 0.18s ease, opacity 0.18s ease;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
-        #globalTimeFab.is-open .global-fab__popover {
-            transform: scale(1);
-            opacity: 1;
+        #fabDock.fab-dock--admin {
+            bottom: 8rem;
+        }
+        #fabDock > * {
             pointer-events: auto;
         }
-        @media (prefers-reduced-motion: reduce) {
-            #globalTimeFab .global-fab__popover {
-                transition: none;
-                transform: none;
+        #fabDock.fab-dock--menu-open > :not(#unifiedActionsRoot) {
+            opacity: 0.35;
+            pointer-events: none;
+            transition: opacity 120ms ease;
+        }
+        #unifiedActionsRoot,
+        #persistentChatWidget,
+        #aiHelperRoot {
+            margin: 0;
+            flex-shrink: 0;
+            align-self: flex-end;
+            width: var(--fab-size);
+            min-height: var(--fab-size);
+        }
+        html[dir="rtl"] #unifiedActionsRoot,
+        html[dir="rtl"] #persistentChatWidget,
+        html[dir="rtl"] #aiHelperRoot {
+            align-self: flex-start;
+        }
+        #unifiedActionsFab,
+        #chatWidgetToggle,
+        #aiHelperFab {
+            width: var(--fab-size);
+            height: var(--fab-size);
+        }
+        #unifiedActionsRoot {
+            position: relative;
+            z-index: 80;
+        }
+        #unifiedActionsRoot.is-open {
+            z-index: 100;
+        }
+        #unifiedActionsMenu {
+            position: absolute;
+            right: 0;
+            bottom: calc(100% + var(--fab-menu-gap));
+            min-width: 14rem;
+            z-index: 101;
+            transform-origin: bottom right;
+        }
+        html[dir="rtl"] #unifiedActionsMenu {
+            right: auto;
+            left: 0;
+            transform-origin: bottom left;
+        }
+        #persistentChatWidget {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        #chatWidgetPanel {
+            position: fixed;
+            right: var(--fab-edge);
+            bottom: var(--fab-edge);
+            width: min(24rem, calc(100vw - (var(--fab-edge) * 2)));
+            height: min(600px, calc(100vh - var(--fab-edge) - 2rem));
+            z-index: 85;
+        }
+        body.fab-dock-admin #chatWidgetPanel {
+            bottom: 8rem;
+        }
+        html[dir="rtl"] #persistentChatWidget {
+            align-items: flex-start;
+        }
+        html[dir="rtl"] #chatWidgetPanel {
+            right: auto;
+            left: var(--fab-edge);
+        }
+        html[dir="rtl"] #fabDock {
+            right: auto;
+            left: var(--fab-edge);
+            align-items: flex-start;
+        }
+        @media (max-width: 767px) {
+            #fabDock {
+                --fab-edge: 1rem;
+                bottom: 5rem;
             }
-            #globalTimeFab:not(.is-open) .global-fab__popover {
-                opacity: 0;
+            #fabDock.fab-dock--admin {
+                bottom: 11rem;
             }
-            #globalTimeFab.is-open .global-fab__popover {
-                opacity: 1;
+            #unifiedActionsMenu {
+                min-width: min(14rem, calc(100vw - 2rem));
+            }
+            #chatWidgetPanel {
+                bottom: 5rem;
+            }
+            body.fab-dock-admin #chatWidgetPanel {
+                bottom: 11rem;
             }
         }
     </style>
@@ -384,7 +469,7 @@
     
     {% block extra_css %}{% endblock %}
 </head>
-<body class="font-sans antialiased bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
+<body class="font-sans antialiased bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark{% if is_admin_user %} fab-dock-admin{% endif %}">
     <script>
         // Sidebar collapsed ASAP
         (function(){ try { if (localStorage.getItem('sidebar-collapsed') === 'true') { document.documentElement.classList.add('sidebar-collapsed'); } } catch(_) {} })();
@@ -1252,10 +1337,9 @@
             <!-- Offline Indicator -->
             {% include 'components/offline_indicator.html' %}
 
-            <!-- Chat User Selector -->
+            <!-- Chat User Selector (widget shell lives in #fabDock below) -->
             {% if is_module_enabled('team_chat') %}
             {% include 'components/chat_user_selector.html' %}
-            {% include 'components/persistent_chat_widget.html' %}
             {% endif %}
 
             <!-- Flash Messages (hidden, converted to toasts by toast-notifications.js) -->
@@ -1357,12 +1441,58 @@
         {% endif %}
 
         {% if current_user.is_authenticated %}
-        {# Avoid overlapping admin version update card (also bottom-20 right-4). #}
-        <div id="aiHelperRoot" class="fixed {% if is_admin_user %}bottom-36{% else %}bottom-20{% endif %} right-4 z-[70]">
-            <button type="button" data-ai-helper-open class="inline-flex items-center gap-2 rounded-full bg-primary text-white px-4 py-3 shadow-xl hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50" aria-label="{{ _('Open AI Helper') }}">
-                <i class="fas fa-wand-magic-sparkles"></i>
-                <span class="hidden sm:inline">{{ _('AI Helper') }}</span>
-            </button>
+        {# Floating hub: Actions, Chat, AI. Admin: whole dock lifted to clear #adminVersionUpdateRoot. #}
+        <div id="fabDock"
+             class="{% if is_admin_user %}fab-dock--admin{% endif %}"
+             aria-label="{{ _('Quick actions dock') }}"
+             data-dashboard-url="{{ url_for('main.dashboard') }}"
+             data-manual-entry-url="{{ url_for('timer.manual_entry') }}"
+             data-new-task-url="{{ url_for('tasks.create_task') }}"
+             data-new-project-url="/projects/create"
+             data-new-client-url="/clients/create"
+             data-reports-url="/reports/">
+            <div id="unifiedActionsRoot" role="group" aria-label="{{ _('Actions') }}">
+                <div id="unifiedActionsMenu" class="hidden rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark shadow-2xl py-1 text-left" role="menu" aria-hidden="true">
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="start" role="menuitem">
+                        <span class="w-5 text-center text-primary" aria-hidden="true"><i class="fas fa-play text-xs"></i></span>
+                        <span>{{ _('Start Timer') }}</span>
+                    </button>
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="log" role="menuitem">
+                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-clock text-xs"></i></span>
+                        <span>{{ _('Log Time') }}</span>
+                    </button>
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="task" role="menuitem">
+                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-tasks text-xs"></i></span>
+                        <span>{{ _('New Task') }}</span>
+                    </button>
+                    <div class="my-1 border-t border-border-light dark:border-border-dark"></div>
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="project" role="menuitem">
+                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-folder-plus text-xs"></i></span>
+                        <span>{{ _('New Project') }}</span>
+                    </button>
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="client" role="menuitem">
+                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-user-plus text-xs"></i></span>
+                        <span>{{ _('New Client') }}</span>
+                    </button>
+                    <button type="button" class="unified-actions__item flex w-full items-center gap-3 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-action="reports" role="menuitem">
+                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-chart-line text-xs"></i></span>
+                        <span>{{ _('Reports') }}</span>
+                    </button>
+                </div>
+                <button type="button" id="unifiedActionsFab" class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50" aria-expanded="false" aria-haspopup="true" aria-controls="unifiedActionsMenu" title="{{ _('Actions') }}">
+                    <i class="fas fa-bolt text-xl" aria-hidden="true"></i>
+                    <span class="sr-only">{{ _('Actions') }}</span>
+                </button>
+            </div>
+            {% if is_module_enabled('team_chat') %}
+            {% include 'components/persistent_chat_widget.html' %}
+            {% endif %}
+            <div id="aiHelperRoot" class="shrink-0 relative z-[70]">
+                <button type="button" id="aiHelperFab" data-ai-helper-open class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50" aria-label="{{ _('Open AI Helper') }}" title="{{ _('AI Helper') }}">
+                    <i class="fas fa-wand-magic-sparkles text-xl" aria-hidden="true"></i>
+                    <span class="sr-only">{{ _('AI Helper') }}</span>
+                </button>
+            </div>
         </div>
         <div id="aiHelperBackdrop" class="hidden fixed inset-0 z-[80] bg-black/30" data-ai-helper-close></div>
         <section id="aiHelperDrawer" class="hidden fixed inset-y-0 right-0 z-[90] w-full max-w-xl bg-card-light dark:bg-card-dark border-l border-border-light dark:border-border-dark shadow-2xl flex flex-col" aria-label="{{ _('AI Helper') }}" role="dialog" aria-modal="true">
@@ -1391,34 +1521,6 @@
         </section>
         {% endif %}
 
-        {% if current_user.is_authenticated %}
-        <div id="globalTimeFab" class="fixed bottom-6 right-6 z-40 max-md:bottom-20" role="group" aria-label="{{ _('Quick time actions') }}"
-             data-dashboard-url="{{ url_for('main.dashboard') }}"
-             data-manual-entry-url="{{ url_for('timer.manual_entry') }}"
-             data-new-task-url="{{ url_for('tasks.create_task') }}">
-            <div class="relative flex flex-col items-end">
-                <div id="globalTimeFabMenu" class="global-fab__popover absolute bottom-full mb-2 right-0 min-w-[12rem] rounded-lg border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark shadow-lg py-1 text-left" role="menu" aria-hidden="true">
-                    <button type="button" class="global-fab__action flex w-full items-center gap-2 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-fab-action="start" role="menuitem">
-                        <span class="w-5 text-center text-primary" aria-hidden="true"><i class="fas fa-play text-xs"></i></span>
-                        <span>{{ _('Start Timer') }}</span>
-                    </button>
-                    <button type="button" class="global-fab__action flex w-full items-center gap-2 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-fab-action="log" role="menuitem">
-                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-plus text-xs"></i></span>
-                        <span>{{ _('Log Time') }}</span>
-                    </button>
-                    <button type="button" class="global-fab__action flex w-full items-center gap-2 px-3 py-2.5 text-sm text-text-light dark:text-text-dark hover:bg-background-light dark:hover:bg-background-dark text-left" data-fab-action="task" role="menuitem">
-                        <span class="w-5 text-center" aria-hidden="true"><i class="fas fa-plus text-xs"></i></span>
-                        <span>{{ _('New Task') }}</span>
-                    </button>
-                </div>
-                <button type="button" id="globalTimeFabBtn" class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50" aria-expanded="false" aria-haspopup="true" aria-controls="globalTimeFabMenu" title="{{ _('Quick actions') }}">
-                    <i class="fas fa-plus text-xl" aria-hidden="true"></i>
-                    <span class="sr-only">{{ _('Quick time actions') }}</span>
-                </button>
-            </div>
-        </div>
-        {% endif %}
-
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/js/all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
@@ -1437,7 +1539,7 @@
     <script src="{{ url_for('static', filename='mentions.js') }}"></script>
     <!-- Floating timer bar -->
     {% if current_user.is_authenticated %}
-    <script src="{{ url_for('static', filename='global-fab.js') }}?v={{ app_version }}"></script>
+    <script src="{{ url_for('static', filename='floating-actions.js') }}?v={{ app_version }}"></script>
     <script src="{{ url_for('static', filename='floating-timer-bar.js') }}"></script>
     <script src="{{ url_for('static', filename='idle.js') }}"></script>
     <script src="{{ url_for('static', filename='ai-helper.js') }}?v={{ app_version }}-ai1"></script>
@@ -2136,7 +2238,6 @@
     {% endif %}
     <!-- Advanced Features -->
     <script src="{{ url_for('static', filename='keyboard-shortcuts-advanced.js') }}?v=2.2"></script>
-    <script src="{{ url_for('static', filename='quick-actions.js') }}"></script>
     <script src="{{ url_for('static', filename='smart-notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='dashboard-widgets.js') }}"></script>
     <script src="{{ url_for('static', filename='dashboard-enhancements.js') }}"></script>
