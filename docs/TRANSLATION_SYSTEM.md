@@ -180,6 +180,8 @@ When you add new translatable strings to the application:
    python scripts/fill_po_argos.py translations/pt/LC_MESSAGES/messages.po --from en --to pt
    ```
 
+   Machine translators often break `%(name)s` / `{name}` placeholders. Run **`python scripts/sanitize_po_format_strings.py translations/pt/LC_MESSAGES/messages.po`** afterward, then **`msgfmt --check-format -o /dev/null …/messages.po`** to confirm the catalog is safe for Python’s `%` / `.format()` at runtime.
+
 5. **Restart application** (or set `TT_COMPILE_TRANSLATIONS_ON_STARTUP=true`) so `.mo` files are compiled when needed
 
 ## Translation File Format

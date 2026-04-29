@@ -4,6 +4,8 @@ Fill empty msgstr in a .po file using Argos Translate (offline en→pt, etc.).
 
 Usage (from repo root, with venv activated and Argos model installed):
   python scripts/fill_po_argos.py translations/pt/LC_MESSAGES/messages.po --from en --to pt
+  python scripts/sanitize_po_format_strings.py translations/pt/LC_MESSAGES/messages.po
+  msgfmt --check-format -o /dev/null translations/pt/LC_MESSAGES/messages.po
 
 Requires: pip install polib argostranslate
 Install Argos language pair once, e.g.:
